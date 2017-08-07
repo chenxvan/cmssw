@@ -252,13 +252,21 @@ class InefficientDeadROCs:
         xCoordInROC = self.rocMaxCol - 1 - xCoordInROC
       else:
         rocNum = realXROC
-    else: # zero ROC is in bottom right corner
-      realXROC = 7 - tempXROC
-      if realYROC == 1:
-        rocNum = 15 - realXROC
-      else:
-        rocNum = realXROC
-        xCoordInROC = self.rocMaxCol - 1 - xCoordInROC
+    else: 
+      if histName.find("LYR1") != -1: #layer 1 -
+        realYROC = 1 - tempYROC
+        if realYROC == 1:
+          rocNum = 15 - realXROC
+          xCoordInROC = self.rocMaxCol - 1 - xCoordInROC
+        else:
+          rocNum = realXROC
+      else: # zero ROC is in bottom right corner 
+        realXROC = 7 - tempXROC
+        if realYROC == 1:
+          rocNum = 15 - realXROC
+        else:
+          rocNum = realXROC
+          xCoordInROC = self.rocMaxCol - 1 - xCoordInROC
         
     return rocNum, xCoordInROC
     
