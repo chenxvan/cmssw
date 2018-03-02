@@ -258,6 +258,8 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
     //this cut is needed to be consisten with residuals calculation
     if (applyVertexCut_ && (track.pt() < 0.75 || std::abs( track.dxy(vertices->at(0).position()) ) > 5*track.dxyError())) continue; 
 
+
+
     bool isBpixtrack = false, isFpixtrack = false;
     int nStripHits = 0;
     int nBpixL1Hits = 0;
@@ -267,6 +269,7 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
     int nFpixD1Hits = 0;
     int nFpixD2Hits = 0;
     int nFpixD3Hits = 0;
+    bool passcuts = true;
 
     // first, look at the full track to see whether it is good
     // auto const & trajParams = track.extra()->trajParams();
@@ -327,7 +330,7 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
       int TRACK_QUALITY_HIGH_PURITY_MASK = 1 << TRACK_QUALITY_HIGH_PURITY_BIT;
       if(!((track.qualityMask() & TRACK_QUALITY_HIGH_PURITY_MASK) >> TRACK_QUALITY_HIGH_PURITY_BIT)) 
 	{
-	  isHitValid = false;
+	  passcuts = false;
 
 	}
 
@@ -335,15 +338,34 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
       float TRACK_PT_CUT_VAL = 1.0f;
       if(!(TRACK_PT_CUT_VAL < track.pt()))
 	{
-	  isHitValid = false;  
+	  passcuts = false;
 	}
 
       // Nstrip cut
       int TRACK_NSTRIP_CUT_VAL = 10;
       if(!(TRACK_NSTRIP_CUT_VAL < nStripHits))
 	{
-	  isHitValid = false;
+	  passcuts = false;
 	}
+      
+      //D0
+      std::array<float, 4> TRACK_D0_CUT_BARREL_VAL = {{0.01f, 0.02f, 0.02f, 0.02f}};
+      float TRACK_D0_CUT_FORWARD_VAL = 0.05f;
+      if(subdetid == PixelSubdetector::PixelBarrel)
+        { if(!((std::abs( track.dxy(vertices->at(0).position()) ) * -1.0) < TRACK_D0_CUT_BARREL_VAL[trackerTopology_ -> pxbLayer(id) -1])) passcuts = false;}
+      if(subdetid == PixelSubdetector::PixelEndcap)
+        { if(!((std::abs( track.dxy(vertices->at(0).position()) ) * -1.0) < TRACK_D0_CUT_FORWARD_VAL)) passcuts = false;}
+
+      
+      //Dz
+      float TRACK_DZ_CUT_BARREL_VAL = 0.01f;
+      float TRACK_DZ_CUT_FORWARD_VAL = 0.5f;
+      if(subdetid == PixelSubdetector::PixelBarrel)
+        { if(!(std::abs( track.dz(vertices->at(0).position())) < TRACK_DZ_CUT_BARREL_VAL)) passcuts = false;}
+      if(subdetid == PixelSubdetector::PixelEndcap)
+        { if(!(std::abs( track.dz(vertices->at(0).position())) < TRACK_DZ_CUT_FORWARD_VAL)) passcuts = false;}
+
+	      
 
       // Pixhit cut
       if(subdetid == PixelSubdetector::PixelBarrel)
@@ -352,29 +374,31 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
 					   (nBpixL2Hits > 0 && nBpixL3Hits > 0 && nBpixL4Hits > 0) ||
 					   (nBpixL2Hits > 0 && nBpixL3Hits > 0 && nFpixD1Hits > 0) ||
 					   (nBpixL2Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0) ||
-					   (nFpixD1Hits > 0 && nFpixD2Hits > 0 && nFpixD3Hits > 0))) isHitValid = false;
+					   (nFpixD1Hits > 0 && nFpixD2Hits > 0 && nFpixD3Hits > 0))) passcuts = false;
 	  if(trackerTopology_ -> pxbLayer(id) == 2) if(!(
 					   (nBpixL1Hits > 0 && nBpixL3Hits > 0 && nBpixL4Hits > 0) ||
 					   (nBpixL1Hits > 0 && nBpixL3Hits > 0 && nFpixD1Hits > 0) ||
-					   (nBpixL1Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0))) isHitValid = false;
+					   (nBpixL1Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0))) passcuts = false;
 	  if(trackerTopology_ -> pxbLayer(id) == 3) if(!(
 					   (nBpixL1Hits > 0 && nBpixL2Hits > 0 && nBpixL4Hits > 0) ||
-					   (nBpixL1Hits > 0 && nBpixL2Hits > 0 && nFpixD1Hits > 0))) isHitValid = false;
+					   (nBpixL1Hits > 0 && nBpixL2Hits > 0 && nFpixD1Hits > 0))) passcuts = false;
 	  if(trackerTopology_ -> pxbLayer(id) == 4) if(!(
-					   (nBpixL1Hits > 0 && nBpixL2Hits > 0 && nBpixL3Hits > 0))) isHitValid = false;
+							 (nBpixL1Hits > 0 && nBpixL2Hits > 0 && nBpixL3Hits > 0))) passcuts = false;
 	}
-      if(subdetid == PixelSubdetector::PixelBarrel)
+      if(subdetid == PixelSubdetector::PixelEndcap)
 	{
 	  if(trackerTopology_ -> pxfDisk(id) == 1) if(!(
 						    (nBpixL1Hits > 0 && nBpixL2Hits > 0 && nBpixL3Hits > 0) ||
 						    (nBpixL1Hits > 0 && nBpixL2Hits > 0 && nFpixD2Hits > 0) ||
-						    (nBpixL1Hits > 0 && nFpixD2Hits > 0 && nFpixD3Hits > 0))) isHitValid = false;
+						    (nBpixL1Hits > 0 && nFpixD2Hits > 0 && nFpixD3Hits > 0))) passcuts = false;
 	  if(trackerTopology_ -> pxfDisk(id) == 2) if(!(
 						    (nBpixL1Hits > 0 && nBpixL2Hits > 0 && nFpixD1Hits > 0) ||
-						    (nBpixL1Hits > 0 && nFpixD1Hits > 0 && nFpixD3Hits  > 0))) isHitValid = false;
+						    (nBpixL1Hits > 0 && nFpixD1Hits > 0 && nFpixD3Hits  > 0))) passcuts = false;
 	  if(trackerTopology_ -> pxfDisk(id) == 3) if(!(
-						    (nBpixL1Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0))) isHitValid = false;
+							(nBpixL1Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0))) passcuts = false;
 	}
+      
+
 
 
       /*
@@ -395,23 +419,45 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
       int row = (int) mp.x();
       int col = (int) mp.y();
       */
+      if (passcuts ==true){
 
-      if ( !(subdetid == PixelSubdetector::PixelBarrel && trackerTopology_ -> pxbLayer(id) == 1) ){
+	if ( !(subdetid == PixelSubdetector::PixelBarrel && trackerTopology_ -> pxbLayer(id) == 1) ){
 
-     if (isHitValid)   {
-       	histo[VALID].fill(id, &iEvent);
-       	histo[EFFICIENCY].fill(1, id, &iEvent);
-      }
-      if (isHitMissing) {
-        histo[MISSING].fill(id, &iEvent);
-        histo[EFFICIENCY].fill(0, id, &iEvent);
-      }
-      if (isHitInactive)   {
-        histo[INACTIVE].fill(id, &iEvent);
-      }
+	  if (isHitValid)   {
+	    histo[VALID].fill(id, &iEvent);
+	    histo[EFFICIENCY].fill(1, id, &iEvent);
+	  }
+	  if (isHitMissing) {
+	    histo[MISSING].fill(id, &iEvent);
+	    histo[EFFICIENCY].fill(0, id, &iEvent);
+	  }
+	  if (isHitInactive)   {
+	    histo[INACTIVE].fill(id, &iEvent);
+	  }
 	}
+	if (subdetid == PixelSubdetector::PixelBarrel && trackerTopology_ -> pxbLayer(id) == 1)
+        {
+	  if (eff_pxb1_vector.size() == 0)
+	    {
+	      histo[VALID].fill(id, &iEvent);
+	      histo[EFFICIENCY].fill(1, id, &iEvent);
+	    }
+	  if (eff_pxb1_vector.size() == 1)
+            {
+	      histo[MISSING].fill(id, &iEvent);
+              histo[EFFICIENCY].fill(0, id, &iEvent);
+            }
+	  if (eff_pxb1_vector.size() == 2)
+            {
+              histo[INACTIVE].fill(id, &iEvent);
+            }
+	}
+      }
+	
     }
   }
+
+    
   histo[VALID   ].executePerEventHarvesting(&iEvent);
   histo[MISSING ].executePerEventHarvesting(&iEvent);
   histo[INACTIVE].executePerEventHarvesting(&iEvent);
