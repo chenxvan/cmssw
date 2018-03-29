@@ -204,7 +204,7 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
     // first, look at the full track to see whether it is good
     // auto const & trajParams = track.extra()->trajParams();
     
-    std::cout<<"track hits loop"<<std::endl;
+    //    std::cout<<"track hits loop"<<std::endl;
     
     auto hb = track->recHitsBegin();
     for(unsigned int h=0;h<track->recHitsSize();h++){
@@ -389,12 +389,12 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
         }
     } //uodated tsosPXB2 here
     
-    std::cout<<"uodated tosos"<<std::endl;
+    //    std::cout<<"uodated tosos"<<std::endl;
         
     if (!valid_layerFrom) continue;
     if (!tsosPXB2.isValid()) continue;
     
-    std::cout<<"mesurements arre here"<<std::endl;
+    //    std::cout<<"mesurements arre here"<<std::endl;
 
     expTrajMeasurements = theLayerMeasurements_->measurements(*pxbLayer1_, tsosPXB2, *trackerPropagator_, *chi2MeasurementEstimator_);
     
@@ -402,14 +402,14 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
     
     for(uint p=0; p<expTrajMeasurements.size();p++){
         
-        std::cout<< "expecting n mesurements  "<< expTrajMeasurements.size()<<std::endl;
+      //        std::cout<< "expecting n mesurements  "<< expTrajMeasurements.size()<<std::endl;
         
         passcuts_hit=true;
         
         TrajectoryMeasurement pxb1TM(expTrajMeasurements[p]);
         const auto& pxb1Hit = pxb1TM.recHit();
         
-         std::cout<< "PXB n mesurements  "<< expTrajMeasurements.size()<<std::endl;
+	//         std::cout<< "PXB n mesurements  "<< expTrajMeasurements.size()<<std::endl;
         
         bool valid = (pxb1Hit->getType()==TrackingRecHit::valid);
         bool missing = (pxb1Hit->getType()==TrackingRecHit::missing);
@@ -418,20 +418,20 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
         int detid= pxb1Hit->geographicalId();
         
         if (pxb1Hit->isValid()){ 
-            std::cout<<"myHIT "<<pxb1Hit->localPosition().x()<<" "<<pxb1Hit->localPosition().y()<<std::endl;
+	  //            std::cout<<"myHIT "<<pxb1Hit->localPosition().x()<<" "<<pxb1Hit->localPosition().y()<<std::endl;
             const SiPixelRecHit* pixhit = dynamic_cast<const SiPixelRecHit*>(pxb1Hit->hit());
             auto clustref = pixhit->cluster();
-            std::cout<<"myCLU DIGI "<<clustref->x()<<" "<<clustref->y()<<std::endl;
+	    //            std::cout<<"myCLU DIGI "<<clustref->x()<<" "<<clustref->y()<<std::endl;
             const PixelGeomDetUnit* theGeomDet = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(pxb1Hit->geographicalId()) );
             const PixelTopology& topol = theGeomDet->specificTopology();
-            std::cout<<"myCLU "<<topol.localPosition(MeasurementPoint(clustref->x(), clustref->y())).x()<<" "<<topol.localPosition(MeasurementPoint(clustref->x(), clustref->y())).y()<<std::endl;
+	    //            std::cout<<"myCLU "<<topol.localPosition(MeasurementPoint(clustref->x(), clustref->y())).x()<<" "<<topol.localPosition(MeasurementPoint(clustref->x(), clustref->y())).y()<<std::endl;
         }
         
         if (inactive)std::cout<<"myHIT missing/inactive "<<pxb1Hit->localPosition().x()<<" "<<pxb1Hit->localPosition().y()<<std::endl;
         
         if (detid==0) continue;
         
-        std::cout<< "VALID n mesurements  "<< expTrajMeasurements.size()<<std::endl;
+	//        std::cout<< "VALID n mesurements  "<< expTrajMeasurements.size()<<std::endl;
         
         //cuts: exactly the same as for other hits but assuming PXB1
         
@@ -443,7 +443,7 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
         if(!((nBpixL2Hits > 0 && nBpixL3Hits > 0 && nBpixL4Hits > 0) || (nBpixL2Hits > 0 && nBpixL3Hits > 0 && nFpixD1Hits > 0) ||
         (nBpixL2Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0) || (nFpixD1Hits > 0 && nFpixD2Hits > 0 && nFpixD3Hits > 0))) passcuts_hit = false;                    
                
-        std::cout<<" "<<valid<<" "<<missing<<" "<<inactive<<" "<<detid<<std::endl;
+	//        std::cout<<" "<<valid<<" "<<missing<<" "<<inactive<<" "<<detid<<std::endl;
         
         for (edmNew::DetSetVector<SiPixelCluster>::const_iterator iter_cl=siPixelClusters->begin(); iter_cl!=siPixelClusters->end(); iter_cl++ ){
             
@@ -451,6 +451,31 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
                 
             const PixelGeomDetUnit* theGeomDet = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(iter_cl->id()) );
             const PixelTopology& topol = theGeomDet->specificTopology();
+
+	    ///
+	    int detid= pxb1Hit->geographicalId();
+	    if (pxb1Hit->isValid()){
+
+	      const SiPixelRecHit* pixhit = dynamic_cast<const SiPixelRecHit*>(pxb1Hit->hit());
+	      const PixelGeomDetUnit* theGeomDet = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(pxb1Hit->geographicalId()) );
+	      const PixelTopology& topol = theGeomDet->specificTopology();
+	             
+	      for(SiPixelCluster const& cluster : *iter_cl){
+		
+		float distanceX = abs((pxb1Hit->localPosition().x()) - (topol.localPosition(MeasurementPoint(cluster.x(), cluster.y())).x()));
+		float distanceY = abs((pxb1Hit->localPosition().y()) - (topol.localPosition(MeasurementPoint(cluster.x(), cluster.y())).y()));
+		if (detid = iter_cl->id()){
+		  std::cout<<"****************************************"<<std::endl;
+		  std::cout<<"X: "<<distanceX<<std::endl;
+		  std::cout<<"Y: "<<distanceY<<std::endl;
+		  std::cout<<"Distance: "<<sqrt(distanceX*distanceX + distanceY*distanceY)<<std::endl;
+		  std::cout<<"****************************************"<<std::endl;
+		}
+	      }
+	    }
+
+	    ///
+
                 
             for(SiPixelCluster const& cluster : *iter_cl) std::cout<<"cluster DIGI: "<<cluster.x()<<" "<<cluster.y()<<" "<<" ";
             for(SiPixelCluster const& cluster : *iter_cl) std::cout<<"cluster: "<<topol.localPosition(MeasurementPoint(cluster.x(), cluster.y())).x()<<" "<<topol.localPosition(MeasurementPoint(cluster.x(), cluster.y())).y()<<" "<<" ";    
