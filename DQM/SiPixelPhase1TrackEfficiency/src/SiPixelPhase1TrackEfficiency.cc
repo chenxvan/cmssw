@@ -36,6 +36,7 @@
 #include "RecoTracker/MeasurementDet/interface/MeasurementTracker.h"
 #include "RecoTracker/Record/interface/CkfComponentsRecord.h"
 #include "TrackingTools/MeasurementDet/interface/LayerMeasurements.h"
+#include "RecoLocalTracker/ClusterParameterEstimator/interface/PixelClusterParameterEstimator.h"
 
 namespace {
 
@@ -417,21 +418,18 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
         
         int detid= pxb1Hit->geographicalId();
         
-        if (pxb1Hit->isValid()){ 
-	  //            std::cout<<"myHIT "<<pxb1Hit->localPosition().x()<<" "<<pxb1Hit->localPosition().y()<<std::endl;
+	if (pxb1Hit->isValid()){ 
+
             const SiPixelRecHit* pixhit = dynamic_cast<const SiPixelRecHit*>(pxb1Hit->hit());
             auto clustref = pixhit->cluster();
-	    //            std::cout<<"myCLU DIGI "<<clustref->x()<<" "<<clustref->y()<<std::endl;
             const PixelGeomDetUnit* theGeomDet = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(pxb1Hit->geographicalId()) );
             const PixelTopology& topol = theGeomDet->specificTopology();
-	    //            std::cout<<"myCLU "<<topol.localPosition(MeasurementPoint(clustref->x(), clustref->y())).x()<<" "<<topol.localPosition(MeasurementPoint(clustref->x(), clustref->y())).y()<<std::endl;
-        }
+
+	}
         
-        if (inactive)std::cout<<"myHIT missing/inactive "<<pxb1Hit->localPosition().x()<<" "<<pxb1Hit->localPosition().y()<<std::endl;
         
         if (detid==0) continue;
         
-	//        std::cout<< "VALID n mesurements  "<< expTrajMeasurements.size()<<std::endl;
         
         //cuts: exactly the same as for other hits but assuming PXB1
         
@@ -443,52 +441,82 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
         if(!((nBpixL2Hits > 0 && nBpixL3Hits > 0 && nBpixL4Hits > 0) || (nBpixL2Hits > 0 && nBpixL3Hits > 0 && nFpixD1Hits > 0) ||
         (nBpixL2Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0) || (nFpixD1Hits > 0 && nFpixD2Hits > 0 && nFpixD3Hits > 0))) passcuts_hit = false;                    
                
-	//        std::cout<<" "<<valid<<" "<<missing<<" "<<inactive<<" "<<detid<<std::endl;
-        
+	//// Cluster distance
+
+
         for (edmNew::DetSetVector<SiPixelCluster>::const_iterator iter_cl=siPixelClusters->begin(); iter_cl!=siPixelClusters->end(); iter_cl++ ){
-            
-            if (detid-iter_cl->id()==0) {
-                
+	  
+	  if (detid-iter_cl->id()==0) {
+	    
             const PixelGeomDetUnit* theGeomDet = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(iter_cl->id()) );
-            const PixelTopology& topol = theGeomDet->specificTopology();
+	    //	    if (missing){
+	    if (valid){
 
-	    ///
-	    int detid= pxb1Hit->geographicalId();
-	    if (pxb1Hit->isValid()){
+	    double lx=tsosPXB2.localPosition().x();
+	    double ly=tsosPXB2.localPosition().y();
 
-	      const SiPixelRecHit* pixhit = dynamic_cast<const SiPixelRecHit*>(pxb1Hit->hit());
-	      const PixelGeomDetUnit* theGeomDet = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(pxb1Hit->geographicalId()) );
-	      const PixelTopology& topol = theGeomDet->specificTopology();
-	             
-	      for(SiPixelCluster const& cluster : *iter_cl){
-		
-		float distanceX = abs((pxb1Hit->localPosition().x()) - (topol.localPosition(MeasurementPoint(cluster.x(), cluster.y())).x()));
-		float distanceY = abs((pxb1Hit->localPosition().y()) - (topol.localPosition(MeasurementPoint(cluster.x(), cluster.y())).y()));
-		if (detid = iter_cl->id()){
-		  std::cout<<"****************************************"<<std::endl;
-		  std::cout<<"X: "<<distanceX<<std::endl;
-		  std::cout<<"Y: "<<distanceY<<std::endl;
-		  std::cout<<"Distance: "<<sqrt(distanceX*distanceX + distanceY*distanceY)<<std::endl;
-		  std::cout<<"****************************************"<<std::endl;
-		}
-	      }
+	    float dx_cl[2]; float dy_cl[2]; dx_cl[0]=dx_cl[1]=dy_cl[0]=dy_cl[1]=-9999.;
+	    edm::ESHandle<PixelClusterParameterEstimator> cpEstimator;
+	    iSetup.get<TkPixelCPERecord>().get("PixelCPEGeneric", cpEstimator);
+	    if(cpEstimator.isValid()){
+	      const PixelClusterParameterEstimator &cpe(*cpEstimator);
+	      edm::ESHandle<TrackerGeometry> tracker;
+	      iSetup.get<TrackerDigiGeometryRecord>().get(tracker);
+	      if(tracker.isValid()){
+		const TrackerGeometry *tkgeom=&(*tracker);
+		edm::Handle<edmNew::DetSetVector<SiPixelCluster> > clusterCollectionHandle;
+		iEvent.getByToken( clustersToken_, clusterCollectionHandle );
+		if(clusterCollectionHandle.isValid()){
+		  const edmNew::DetSetVector<SiPixelCluster>& clusterCollection=*clusterCollectionHandle;
+		  edmNew::DetSetVector<SiPixelCluster>::const_iterator itClusterSet=clusterCollection.begin();
+		  float minD[2]; minD[0]=minD[1]=10000.;
+		  for( ; itClusterSet!=clusterCollection.end(); itClusterSet++){
+		    DetId detId(itClusterSet->id());
+		    if(detId.rawId()!=pxb1Hit->geographicalId().rawId()) continue;   //only look at the same module
+		    const PixelGeomDetUnit *pixdet=(const PixelGeomDetUnit*) tkgeom->idToDetUnit(detId);
+		    edmNew::DetSet<SiPixelCluster>::const_iterator itCluster=itClusterSet->begin();
+		    for( ; itCluster!=itClusterSet->end(); ++itCluster){
+		      LocalPoint lp(itCluster->x(), itCluster->y(), 0.);
+		      PixelClusterParameterEstimator::ReturnType params=cpe.getParameters(*itCluster,*pixdet);
+		      lp=std::get<0>(params);
+		      float D = sqrt((lp.x()-lx)*(lp.x()-lx)+(lp.y()-ly)*(lp.y()-ly));
+		      if(D<minD[0]){
+			minD[1]=minD[0];
+			dx_cl[1]=dx_cl[0];
+			dy_cl[1]=dy_cl[0];
+			minD[0]=D;
+			dx_cl[0]=lp.x();
+			dy_cl[0]=lp.y();
+		      }else if(D<minD[1]){
+			minD[1]=D;
+			dx_cl[1]=lp.x();
+			dy_cl[1]=lp.y();
+		      } //close else if
+		    }//close cluster loop
+		  }//close clusterCollection loop
+		  for(size_t i=0; i<2; i++){
+		    if(minD[i]<9999.){
+		      dx_cl[i]=fabs(dx_cl[i]-lx);
+		      dy_cl[i]=fabs(dy_cl[i]-ly);
+		    }
+		  }
+		}//close cluster coll handle loop 
+	      }//close if track valid loop
+	    }// valid cpEstimator
+	    float d_cl[2]; d_cl[0]=d_cl[1]=-9999.;
+	    if(dx_cl[0]!=-9999. && dy_cl[0]!=-9999.) d_cl[0]=sqrt(dx_cl[0]*dx_cl[0]+dy_cl[0]*dy_cl[0]);
+	    if(dx_cl[1]!=-9999. && dy_cl[1]!=-9999.) d_cl[1]=sqrt(dx_cl[1]*dx_cl[1]+dy_cl[1]*dy_cl[1]);
+	  
+	    //if (missing){
+	    //	    if (valid){
+
+
+	      std::cout<<"Distance "<<d_cl[1]<<std::endl;
 	    }
+	  
+	  }
+	}
 
-	    ///
-
-                
-            for(SiPixelCluster const& cluster : *iter_cl) std::cout<<"cluster DIGI: "<<cluster.x()<<" "<<cluster.y()<<" "<<" ";
-            for(SiPixelCluster const& cluster : *iter_cl) std::cout<<"cluster: "<<topol.localPosition(MeasurementPoint(cluster.x(), cluster.y())).x()<<" "<<topol.localPosition(MeasurementPoint(cluster.x(), cluster.y())).y()<<" "<<" ";    
-            }
-//                 if (detid-iter_cl->id()==0) {
-//                 
-//                 std::cout<<"one cluster "<<iter_cl->id()<<std::endl;
-//                 std::cout<<"one cluster "<<iter_cl->size()<<std::endl;
-// 
-// 
-//             
-//            
-        }
         
         bool found_det = false;
         
