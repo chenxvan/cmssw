@@ -413,27 +413,41 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
     bool valid = false;
     bool missing = false;
     for (const auto & detAndState : compDets) {
-            const auto & pXb1_lpos = detAndState.second.localPosition(); 
-	    int detid =  detAndState.first->geographicalId().rawId();
-	    for (edmNew::DetSetVector<SiPixelCluster>::const_iterator iter_cl=siPixelClusters->begin(); iter_cl!=siPixelClusters->end(); iter_cl++ ){
-	      DetId detId(iter_cl->id());
-	      if(detId.rawId()!=detAndState.first->geographicalId().rawId()) continue;
-	      
-	      const PixelGeomDetUnit *pixdet=(const PixelGeomDetUnit*) tkgeom->idToDetUnit(detId);
-	      edmNew::DetSet<SiPixelCluster>::const_iterator itCluster=iter_cl->begin();
-	      for( ; itCluster!=iter_cl->end(); ++itCluster){
-		
-		LocalPoint lp(itCluster->x(), itCluster->y(), 0.);				
-		PixelClusterParameterEstimator::ReturnType params=cpe.getParameters(*itCluster,*pixdet);
-		lp=std::get<0>(params);
-		
-		float Xdist = abs(lp.x()-pXb1_lpos.x());                                              
-		float Ydist = abs(lp.y()-pXb1_lpos.y());
-		if (Xdist < 0.05 || Ydist < 0.05) {valid = true;} 
-		if (!(Xdist < 0.05 || Ydist < 0.05)) {missing =true;}
-				 
-	      }
-	    }
+      std::cout<<"Check! "<<std::endl;
+      const auto & pXb1_lpos = detAndState.second.localPosition(); 
+      int detid =  detAndState.first->geographicalId().rawId();
+      for (edmNew::DetSetVector<SiPixelCluster>::const_iterator iter_cl=siPixelClusters->begin(); iter_cl!=siPixelClusters->end(); iter_cl++ ){
+	DetId detId(iter_cl->id());
+	float minD[2]; minD[0]=minD[1]=10000.;
+	if(detId.rawId()!=detAndState.first->geographicalId().rawId()) continue;
+	
+	const PixelGeomDetUnit *pixdet=(const PixelGeomDetUnit*) tkgeom->idToDetUnit(detId);
+	edmNew::DetSet<SiPixelCluster>::const_iterator itCluster=iter_cl->begin();
+	for( ; itCluster!=iter_cl->end(); ++itCluster){
+	  
+	  LocalPoint lp(itCluster->x(), itCluster->y(), 0.);				
+	  PixelClusterParameterEstimator::ReturnType params=cpe.getParameters(*itCluster,*pixdet);
+	  lp=std::get<0>(params);
+	  
+	  float Xdist = abs(lp.x()-pXb1_lpos.x());                                              
+	  float Ydist = abs(lp.y()-pXb1_lpos.y());
+	  if(Xdist<minD[0]){
+	    minD[0]=Xdist;
+	  }else if(Ydist<minD[1]){
+	    minD[1]=Ydist;
+	  }
+	}
+	
+	if (minD[0] < 0.5 && minD[1] < 0.5) {
+	  valid = true;
+	  std::cout<<"Valid! "<<std::endl;
+	} 
+	if (!(minD[0] < 0.5 && minD[1] < 0.5)) {
+	  missing =true;
+	  std::cout<<"Missing! "<<std::endl;
+	}
+	
+      }
 
 	    //cuts: exactly the same as for other hits but assuming PXB1
 	    // Hp cut
