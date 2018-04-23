@@ -215,7 +215,7 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
     // first, look at the full track to see whether it is good
     // auto const & trajParams = track.extra()->trajParams();
     
-    //    std::cout<<"track hits loop"<<std::endl;
+
     
     auto hb = track->recHitsBegin();
     for(unsigned int h=0;h<track->recHitsSize();h++){
@@ -467,9 +467,9 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
 	      }
 	    }
 	    if (minD[0] != 10000. && minD[1] != 10000.){
-	      if (missing && (minD[0] <= 0.018 && minD[0] <= 0.018)) {
+	      if (missing && (minD[0] <= 0.02 && minD[0] <= 0.02)) {
 		valid = true; missing = false;
-		std::cout<<"Yeah!!!! "<<std::endl;
+
 	      }
 	    }
 	  }
