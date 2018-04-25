@@ -38,6 +38,14 @@
 #include "TrackingTools/MeasurementDet/interface/LayerMeasurements.h"
 #include "RecoLocalTracker/ClusterParameterEstimator/interface/PixelClusterParameterEstimator.h"
 
+/*
+#include "CondFormats/SiPixelObjects/interface/SiPixelFedCabling.h"
+#include "CondFormats/SiPixelObjects/interface/SiPixelFedCablingMap.h"
+#include "CondFormats/DataRecord/interface/SiPixelFedCablingMapRcd.h"
+#include "DataFormats/SiPixelDetId/interface/PixelFEDChannel.h"
+#include "CondFormats/SiPixelObjects/interface/PixelROC.h"
+*/
+
 
 ///commnet
 
@@ -62,11 +70,16 @@ class SiPixelPhase1TrackEfficiency final : public SiPixelPhase1Base {
   edm::EDGetTokenT<reco::VertexCollection> vtxToken_; 
   edm::EDGetTokenT<TrajTrackAssociationCollection>  trajTrackCollectionToken_;  
   edm::EDGetTokenT<MeasurementTrackerEvent> tracker_; //new
+  //  edm::EDGetTokenT<PixelFEDChannelCollection> pixelFEDChannelCollectionToken_;
   bool applyVertexCut_;
 
   const TrackerTopology*                trackerTopology_;
   const Propagator*                     trackerPropagator_;
   const MeasurementEstimator*           chi2MeasurementEstimator_;
+  //  bool firstEvent_;
+  //  const TrackerGeometry* trackerGeometry_ = nullptr;
+  //  const SiPixelFedCabling* cablingMap = nullptr;
+
 };
 
 SiPixelPhase1TrackEfficiency::SiPixelPhase1TrackEfficiency(const edm::ParameterSet& iConfig) :
@@ -76,7 +89,10 @@ SiPixelPhase1TrackEfficiency::SiPixelPhase1TrackEfficiency(const edm::ParameterS
   tracksToken_ = consumes<reco::TrackCollection>(iConfig.getParameter<edm::InputTag>("tracks"));
   vtxToken_ = consumes<reco::VertexCollection>(iConfig.getParameter<edm::InputTag>("primaryvertices"));
   applyVertexCut_=iConfig.getUntrackedParameter<bool>("VertexCut",true);
-  trajTrackCollectionToken_ = consumes<TrajTrackAssociationCollection>(iConfig.getParameter<edm::InputTag>("trajectoryInput"));   clustersToken_=consumes<edmNew::DetSetVector<SiPixelCluster> >(iConfig.getParameter<edm::InputTag>("clusters")); 
+  trajTrackCollectionToken_ = consumes<TrajTrackAssociationCollection>(iConfig.getParameter<edm::InputTag>("trajectoryInput"));
+  clustersToken_=consumes<edmNew::DetSetVector<SiPixelCluster> >(iConfig.getParameter<edm::InputTag>("clusters")); 
+  //  pixelFEDChannelCollectionToken_ = consumes<PixelFEDChannelCollection>(edm::InputTag("siPixelDigis"));
+  //  firstEvent_=true;
 }
 
 void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup) {
@@ -146,6 +162,30 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
    const PixelClusterParameterEstimator &cpe(*cpEstimator);
    const TrackerGeometry *tkgeom=&(*tracker);
 
+   /*
+   //Access ROC info
+   if( !checktrigger(iEvent,iSetup,DCS) ) return;
+
+   if(firstEvent_){
+     edm::ESHandle<TrackerGeometry> tmpTkGeometry;
+     iSetup.get<TrackerDigiGeometryRecord>().get(tmpTkGeometry);
+     trackerGeometry_=&(*tmpTkGeometry);
+
+     edm::ESHandle<SiPixelFedCablingMap> pixelCabling;
+     iSetup.get<SiPixelFedCablingMapRcd>().get(pixelCabling);
+     cablingMap = pixelCabling.product();
+
+     firstEvent_=false;
+   }
+
+   edm::Handle<edmNew::DetSetVector<PixelFEDChannel> > input;
+
+   iEvent.getByToken(pixelFEDChannelCollectionToken_, input);
+   if (!input.isValid()) return;
+   */
+
+
+
 ////////////////////////////////////////////////////////////////////////////////////////// 
 
   // Hp cut
@@ -213,7 +253,7 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
     passcuts_hit = true;
 
     // first, look at the full track to see whether it is good
-    // auto const & trajParams = track.extra()->trajParams();
+    //auto const & trajParams = track.extra()->trajParams();
     
 
     
@@ -257,25 +297,14 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
     if (!isBpixtrack && !isFpixtrack) continue;
     
     // Hp cut
-    if(!((track->qualityMask() & TRACK_QUALITY_HIGH_PURITY_MASK) >> TRACK_QUALITY_HIGH_PURITY_BIT)) 
-    {
-        passcuts = false;
-
-    }
+    if(!((track->qualityMask() & TRACK_QUALITY_HIGH_PURITY_MASK) >> TRACK_QUALITY_HIGH_PURITY_BIT)) passcuts = false;
 
     // Pt cut
-    if(!(TRACK_PT_CUT_VAL < track->pt()))
-    {
-        passcuts = false;
-    }
+    if(!(TRACK_PT_CUT_VAL < track->pt()))  passcuts = false;
 
     // Nstrip cut
-    if(!(TRACK_NSTRIP_CUT_VAL < nStripHits))
-    {
-        passcuts = false;
-    }
+    if(!(TRACK_NSTRIP_CUT_VAL < nStripHits))    passcuts = false;
       
-
     // then, look at each hit
     for(unsigned int h=0;h<track->recHitsSize();h++){
         
@@ -338,21 +367,52 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
 							(nBpixL1Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0))) passcuts_hit = false;
 	}
       
-      /*
+
+      //ROC edge cut
       const SiPixelRecHit* pixhit = dynamic_cast<const SiPixelRecHit*>(hit);
       const PixelGeomDetUnit* geomdetunit = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(id) );
       const PixelTopology& topol = geomdetunit->specificTopology();
-      // this commented part is useful if one wants ROC level maps of hits, however the local position may fall out of a ROC and the ROC maps will look very strange (with no white cross)
+
       LocalPoint lp;
       if (pixhit) {
         lp = pixhit->localPosition();
-      } else {
-        lp = trajParams[h].position();
       }
+      
       MeasurementPoint mp = topol.measurementPosition(lp);
-      int row = (int) mp.x();
-      int col = (int) mp.y();
+      int row = (int) mp.x() % 80;
+      int col = (int) mp.y() % 52;
+      
+      int centerrow = 40;
+      int centercol = 26;
+      
+      if (!((col < (centercol + 20)) && (col > (centercol - 20)) && (row < (centerrow + 30)) && (row > (centerrow - 30 )))) passcuts = false;
+   
+
+      //smart way to define the row and col
+      /*
+      for(const auto& disabledOnDetId: *input){
+	for(const auto& ch: disabledOnDetId) {
+	  sipixelobjects::CablingPathToDetUnit path = {ch.fed, ch.link, 0};
+	  for (path.roc=1; path.roc<=(ch.roc_last-ch.roc_first)+1; path.roc++){
+	    const sipixelobjects::PixelROC *roc = cablingMap->findItem(path);  
+	    assert(roc!=nullptr);
+	    assert(roc->rawId()==disabledOnDetId.detId());
+	    const PixelGeomDetUnit * theGeomDet = dynamic_cast<const PixelGeomDetUnit*> (trackerGeometry_->idToDet(roc->rawId()));
+	    PixelTopology const * topology = &(theGeomDet->specificTopology());
+	    sipixelobjects::LocalPixel::RocRowCol local = {topology->rowsperroc()/2, topology->colsperroc()/2}; //center of ROC
+	    sipixelobjects::GlobalPixel global = roc->toGlobal(sipixelobjects::LocalPixel(local));
+	    int rowslow = topology->rowsperroc()/2 - 10;
+	    int rowshigh =topology->rowsperroc()/2 + 10;
+	    int colslow =topology->colsperroc()/2 - 10;
+	    int colshigh =topology->colsperroc()/2 + 10;
+	     if (!(global.col < colshigh && global.col > colslow && global.row < rowshigh && global.row > rowslow )) passcuts = false;
+	  }
+	}
+      }
       */
+
+
+
       if (passcuts_hit ==true && passcuts){
 
 	if ( !(subdetid == PixelSubdetector::PixelBarrel && trackerTopology_ -> pxbLayer(id) == 1) ){
@@ -424,23 +484,38 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
         int detid= pxb1Hit->geographicalId();
         
         if (detid==0) continue;
-        
-        
-        //cuts: exactly the same as for other hits but assuming PXB1
-	// Hp cut
-	if(!((track->qualityMask() & TRACK_QUALITY_HIGH_PURITY_MASK) >> TRACK_QUALITY_HIGH_PURITY_BIT))	 passcuts = false;
-	// Pt cut	
-	if(!(TRACK_PT_CUT_VAL < track->pt())) passcuts = false;
-	// Nstrip cut
-	if(!(TRACK_NSTRIP_CUT_VAL < nStripHits)) passcuts = false;
+
+	//cuts: exactly the same as for other hits but assuming PXB1
 	//D0
         if(!((std::abs( track->dxy(vertices->at(0).position()) ) * -1.0) < TRACK_D0_CUT_BARREL_VAL[trackerTopology_ -> pxbLayer(detid) -1])) passcuts_hit = false;
         //Dz
         if(!(std::abs( track->dz(vertices->at(0).position())) < TRACK_DZ_CUT_BARREL_VAL)) passcuts_hit = false;
         // Pixhit cut
         if(!((nBpixL2Hits > 0 && nBpixL3Hits > 0 && nBpixL4Hits > 0) || (nBpixL2Hits > 0 && nBpixL3Hits > 0 && nFpixD1Hits > 0) ||
-        (nBpixL2Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0) || (nFpixD1Hits > 0 && nFpixD2Hits > 0 && nFpixD3Hits > 0))) passcuts_hit = false;             
-        
+	     (nBpixL2Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0) || (nFpixD1Hits > 0 && nFpixD2Hits > 0 && nFpixD3Hits > 0))) passcuts_hit = false;                    
+	
+	//ROC edge cut                                                                                                                   
+	const SiPixelRecHit* pixhit = dynamic_cast<const SiPixelRecHit*>(pxb1Hit->hit());
+	const PixelGeomDetUnit* geomdetunit = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(detid) );
+	const PixelTopology& topol = geomdetunit->specificTopology();
+
+	LocalPoint lp;
+	if (pixhit) {
+	  lp = pixhit->localPosition();
+	}
+
+	MeasurementPoint mp = topol.measurementPosition(lp);
+	int row = (int) mp.x() % 80;
+	int col = (int) mp.y() % 52;
+
+	int centerrow = 40;
+	int centercol = 26;
+
+	if (!((col < (centercol + 10)) && (col > (centercol - 10)) && (row < (centerrow + 10)) && (row > (centerrow - 10 )))) passcuts = false;
+
+
+
+
 	auto compDets = pxbLayer1_->compatibleDets(tsosPXB2, *trackerPropagator_, *chi2MeasurementEstimator_);
 	for (const auto & detAndState : compDets) {
 	  const auto & pXb1_lpos = detAndState.second.localPosition();
