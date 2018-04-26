@@ -328,29 +328,7 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
 							(nBpixL1Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0))) passcuts_hit = false;
 	}
       
-      //Fiducial Cut
-      const SiPixelRecHit* pixhit = dynamic_cast<const SiPixelRecHit*>(hit);
-      const PixelGeomDetUnit* geomdetunit = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(id) );
-      const PixelTopology& topol = geomdetunit->specificTopology();
 
-      LocalPoint lp;
-      if (pixhit) {
-        lp = pixhit->localPosition();
-      }
-      
-      MeasurementPoint mp = topol.measurementPosition(lp);
-      int row = (int) mp.x() % 80;
-      int col = (int) mp.y() % 52;
-      
-      int centerrow = 40;
-      int centercol = 26;
-      
-      if (!((col < (centercol + 20)) && (col > (centercol - 20)) && (row < (centerrow + 30)) && (row > (centerrow - 30 )))) passcuts_hit = false;
-
-
-
-
-      if (passcuts_hit ==true && passcuts){
 
 	if ( !(subdetid == PixelSubdetector::PixelBarrel && trackerTopology_ -> pxbLayer(id) == 1) ){
 
@@ -367,7 +345,7 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
 	  }
 	}
 
-    }
+
 	
     }
     
