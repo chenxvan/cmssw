@@ -257,23 +257,13 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
     if (!isBpixtrack && !isFpixtrack) continue;
     
     // Hp cut
-    if(!((track->qualityMask() & TRACK_QUALITY_HIGH_PURITY_MASK) >> TRACK_QUALITY_HIGH_PURITY_BIT)) 
-    {
-        passcuts = false;
-
-    }
+    if(!((track->qualityMask() & TRACK_QUALITY_HIGH_PURITY_MASK) >> TRACK_QUALITY_HIGH_PURITY_BIT))  passcuts = false;
 
     // Pt cut
-    if(!(TRACK_PT_CUT_VAL < track->pt()))
-    {
-        passcuts = false;
-    }
+    if(!(TRACK_PT_CUT_VAL < track->pt()))  passcuts = false;
 
     // Nstrip cut
-    if(!(TRACK_NSTRIP_CUT_VAL < nStripHits))
-    {
-        passcuts = false;
-    }
+    if(!(TRACK_NSTRIP_CUT_VAL < nStripHits))   passcuts = false;
       
 
     // then, look at each hit
@@ -338,21 +328,28 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
 							(nBpixL1Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0))) passcuts_hit = false;
 	}
       
-      /*
+      //Fiducial Cut
       const SiPixelRecHit* pixhit = dynamic_cast<const SiPixelRecHit*>(hit);
       const PixelGeomDetUnit* geomdetunit = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(id) );
       const PixelTopology& topol = geomdetunit->specificTopology();
-      // this commented part is useful if one wants ROC level maps of hits, however the local position may fall out of a ROC and the ROC maps will look very strange (with no white cross)
+
       LocalPoint lp;
       if (pixhit) {
         lp = pixhit->localPosition();
-      } else {
-        lp = trajParams[h].position();
       }
+      
       MeasurementPoint mp = topol.measurementPosition(lp);
-      int row = (int) mp.x();
-      int col = (int) mp.y();
-      */
+      int row = (int) mp.x() % 80;
+      int col = (int) mp.y() % 52;
+      
+      int centerrow = 40;
+      int centercol = 26;
+      
+      if (!((col < (centercol + 20)) && (col > (centercol - 20)) && (row < (centerrow + 30)) && (row > (centerrow - 30 )))) passcuts_hit = false;
+
+
+
+
       if (passcuts_hit ==true && passcuts){
 
 	if ( !(subdetid == PixelSubdetector::PixelBarrel && trackerTopology_ -> pxbLayer(id) == 1) ){
@@ -374,7 +371,9 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
 	
     }
     
-   //layer 1 specific here
+
+
+    ///////////////////////////////////////////////layer 1 specific here/////////////////////////////////////////////////////////////////////
    valid_layerFrom = false;
     
    //propagation only from PXB2 and PXD1, more cuts later
@@ -407,156 +406,184 @@ void SiPixelPhase1TrackEfficiency::analyze(const edm::Event& iEvent, const edm::
     
 
     
-    //propagation A       
+    //propagation A: Calculate the efficiency by the distance to the closest cluster       
+    expTrajMeasurements = theLayerMeasurements_->measurements(*pxbLayer1_, tsosPXB2, *trackerPropagator_, *chi2MeasurementEstimator_);
     auto compDets = pxbLayer1_->compatibleDets(tsosPXB2, *trackerPropagator_, *chi2MeasurementEstimator_);
     std::pair<int,bool[3]> eff_map;
     bool valid = false;
     bool missing = false;
-    for (const auto & detAndState : compDets) {
-      std::cout<<"Check! "<<std::endl;
-      const auto & pXb1_lpos = detAndState.second.localPosition(); 
-      int detid =  detAndState.first->geographicalId().rawId();
-      for (edmNew::DetSetVector<SiPixelCluster>::const_iterator iter_cl=siPixelClusters->begin(); iter_cl!=siPixelClusters->end(); iter_cl++ ){
-	DetId detId(iter_cl->id());
-	float minD[2]; minD[0]=minD[1]=10000.;
-	if(detId.rawId()!=detAndState.first->geographicalId().rawId()) continue;
+    passcuts_hit = true;
+
+
+    //Fiducial Cut, only calculate the efficiency of the central pixels 
+    for(uint p=0; p<expTrajMeasurements.size();p++){
+
+      TrajectoryMeasurement pxb1TM(expTrajMeasurements[p]);
+      const auto& pxb1Hit = pxb1TM.recHit();
+      int detidHit= pxb1Hit->geographicalId();
+      if (detidHit==0) continue;
+
+      const SiPixelRecHit* pixhit = dynamic_cast<const SiPixelRecHit*>(pxb1Hit->hit());
+      const PixelGeomDetUnit* geomdetunit = dynamic_cast<const PixelGeomDetUnit*> ( tracker->idToDet(detidHit) );
+      const PixelTopology& topol = geomdetunit->specificTopology();
+
+      LocalPoint lp;
+      if (pixhit) {
+	lp = pixhit->localPosition();
+      }
+
+      MeasurementPoint mp = topol.measurementPosition(lp);
+      int row = (int) mp.x() % 80;
+      int col = (int) mp.y() % 52;
+
+      int centerrow = 40;
+      int centercol = 26;
+
+      if (!((col < (centercol + 10)) && (col > (centercol - 10)) && (row < (centerrow + 10)) && (row > (centerrow - 10 )))) passcuts_hit = false;
+      
+
+      //Access the distance to the closest cluster
+      for (const auto & detAndState : compDets) {
 	
-	const PixelGeomDetUnit *pixdet=(const PixelGeomDetUnit*) tkgeom->idToDetUnit(detId);
-	edmNew::DetSet<SiPixelCluster>::const_iterator itCluster=iter_cl->begin();
-	for( ; itCluster!=iter_cl->end(); ++itCluster){
-	  
-	  LocalPoint lp(itCluster->x(), itCluster->y(), 0.);				
-	  PixelClusterParameterEstimator::ReturnType params=cpe.getParameters(*itCluster,*pixdet);
-	  lp=std::get<0>(params);
-	  
-	  float Xdist = abs(lp.x()-pXb1_lpos.x());                                              
-	  float Ydist = abs(lp.y()-pXb1_lpos.y());
-	  if(Xdist<minD[0]){
-	    minD[0]=Xdist;
-	  }else if(Ydist<minD[1]){
-	    minD[1]=Ydist;
+	const auto & pXb1_lpos = detAndState.second.localPosition(); 
+	int detid =  detAndState.first->geographicalId().rawId();
+	for (edmNew::DetSetVector<SiPixelCluster>::const_iterator iter_cl=siPixelClusters->begin(); iter_cl!=siPixelClusters->end(); iter_cl++ ){
+	  DetId detId(iter_cl->id());
+	  float minD[2]; minD[0]=minD[1]=10000.;
+	  if(detId.rawId()!=detAndState.first->geographicalId().rawId()) continue;
+	  if(pxb1Hit->geographicalId().rawId()!=detAndState.first->geographicalId().rawId()) continue; 
+	  const PixelGeomDetUnit *pixdet=(const PixelGeomDetUnit*) tkgeom->idToDetUnit(detId);
+	  edmNew::DetSet<SiPixelCluster>::const_iterator itCluster=iter_cl->begin();
+	  if (passcuts_hit){
+	    for( ; itCluster!=iter_cl->end(); ++itCluster){
+	      
+	      LocalPoint lp(itCluster->x(), itCluster->y(), 0.);				
+	      PixelClusterParameterEstimator::ReturnType params=cpe.getParameters(*itCluster,*pixdet);
+	      lp=std::get<0>(params);
+	      
+	      float Xdist = abs(lp.x()-pXb1_lpos.x());                                              
+	      float Ydist = abs(lp.y()-pXb1_lpos.y());
+	      if(Xdist<minD[0]){
+		minD[0]=Xdist;
+	      }
+	      if(Ydist<minD[1]){
+		minD[1]=Ydist;
+	      }
+	    }
+
+	    if ((minD[0] < 0.02) && (minD[1] < 0.02)) {
+	      valid = true;
+	      missing =false;
+
+	    } else{
+	      missing =true;
+	      valid = false;
+
+	    }
 	  }
 	}
 	
-	if (minD[0] < 0.5 && minD[1] < 0.5) {
-	  valid = true;
-	  std::cout<<"Valid! "<<std::endl;
-	} 
-	if (!(minD[0] < 0.5 && minD[1] < 0.5)) {
-	  missing =true;
-	  std::cout<<"Missing! "<<std::endl;
+	//cuts: exactly the same as for other hits but assuming PXB1
+
+	//D0
+	if(!((std::abs( track->dxy(vertices->at(0).position()) ) * -1.0) < TRACK_D0_CUT_BARREL_VAL[trackerTopology_ -> pxbLayer(detid) -1])) passcuts_hit = false;
+	//Dz
+	if(!(std::abs( track->dz(vertices->at(0).position())) < TRACK_DZ_CUT_BARREL_VAL)) passcuts_hit = false;
+	// Pixhit cut
+	if(!((nBpixL2Hits > 0 && nBpixL3Hits > 0 && nBpixL4Hits > 0) || (nBpixL2Hits > 0 && nBpixL3Hits > 0 && nFpixD1Hits > 0) ||
+	     (nBpixL2Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0) || (nFpixD1Hits > 0 && nFpixD2Hits > 0 && nFpixD3Hits > 0))) passcuts_hit = false;
+	bool found_det = false;
+	
+	if (passcuts && passcuts_hit){
+	  for (unsigned int i_eff=0; i_eff<eff_pxb1_vector.size(); i_eff++){
+	    //in case found hit in the same det, take only the valid hit 
+	    if (eff_pxb1_vector[i_eff].first==detid){
+	      
+	      found_det=true;
+	      if (eff_pxb1_vector[i_eff].second[0]==false && valid==true){
+		eff_pxb1_vector[i_eff].second[0]=valid;
+		eff_pxb1_vector[i_eff].second[1]=missing;
+		
+	      }
+	    }
+	    
+	  }
+	  if (!found_det) {
+	    
+	    eff_map.first=detid;
+	    eff_map.second[0]=valid;
+	    eff_map.second[1]=missing;
+	    eff_pxb1_vector.push_back(eff_map);
+	    
+	  }
 	}
 	
       }
-
-	    //cuts: exactly the same as for other hits but assuming PXB1
-	    // Hp cut
-	    if(!((track->qualityMask() & TRACK_QUALITY_HIGH_PURITY_MASK) >> TRACK_QUALITY_HIGH_PURITY_BIT)) passcuts = false;
-	    // Pt cut
-	    if(!(TRACK_PT_CUT_VAL < track->pt())) passcuts = false;
-	    // Nstrip cut
-	    if(!(TRACK_NSTRIP_CUT_VAL < nStripHits)) passcuts = false;
-	    //D0
-	    if(!((std::abs( track->dxy(vertices->at(0).position()) ) * -1.0) < TRACK_D0_CUT_BARREL_VAL[trackerTopology_ -> pxbLayer(detid) -1])) passcuts_hit = false;
-	    //Dz
-	    if(!(std::abs( track->dz(vertices->at(0).position())) < TRACK_DZ_CUT_BARREL_VAL)) passcuts_hit = false;
-	    // Pixhit cut
-	    if(!((nBpixL2Hits > 0 && nBpixL3Hits > 0 && nBpixL4Hits > 0) || (nBpixL2Hits > 0 && nBpixL3Hits > 0 && nFpixD1Hits > 0) ||
-		 (nBpixL2Hits > 0 && nFpixD1Hits > 0 && nFpixD2Hits > 0) || (nFpixD1Hits > 0 && nFpixD2Hits > 0 && nFpixD3Hits > 0))) passcuts_hit = false;
-	    bool found_det = false;
-
-	    if (passcuts && passcuts_hit){
-	      for (unsigned int i_eff=0; i_eff<eff_pxb1_vector.size(); i_eff++){
-                //in case found hit in the same det, take only the valid hit 
-                if (eff_pxb1_vector[i_eff].first==detid){
-
-		  found_det=true;
-		  if (eff_pxb1_vector[i_eff].second[0]==false && valid==true){
-		    eff_pxb1_vector[i_eff].second[0]=valid;
-		    eff_pxb1_vector[i_eff].second[1]=missing;
-
-		  }
-                }
-
-	      }
-	      if (!found_det) {
-
-                eff_map.first=detid;
-                eff_map.second[0]=valid;
-                eff_map.second[1]=missing;
-                eff_pxb1_vector.push_back(eff_map);
-
-	      }
-            }
-            
     }
     
-	//propagation B
-    expTrajMeasurements = theLayerMeasurements_->measurements(*pxbLayer1_, tsosPXB2, *trackerPropagator_, *chi2MeasurementEstimator_);
+    //propagation B: filling inactive hits
     
     for(uint p=0; p<expTrajMeasurements.size();p++){
+      
+      TrajectoryMeasurement pxb1TM(expTrajMeasurements[p]);
+      const auto& pxb1Hit = pxb1TM.recHit();
+      bool inactive = (pxb1Hit->getType()==TrackingRecHit::inactive);
+      int detid= pxb1Hit->geographicalId();
+      bool found_det = false;
+      
+      if (passcuts && passcuts_hit){
+	for (unsigned int i_eff=0; i_eff<eff_pxb1_vector.size(); i_eff++){
+	  //in case found hit in the same det, take only the valid hit
+	  if (eff_pxb1_vector[i_eff].first==detid){
+	    
+	    found_det=true;
+	    if (eff_pxb1_vector[i_eff].second[0]==false && valid==true){
+	      eff_pxb1_vector[i_eff].second[2]=inactive;
+	    } 
+	  }
+          
+	}
         
-        passcuts_hit=true;
+	//if no other hit in det
+	if (!found_det) {
+	  
+	  eff_map.first=detid;
+	  eff_map.second[2]=inactive;
+	  eff_pxb1_vector.push_back(eff_map);  
+          
+	}
         
-        TrajectoryMeasurement pxb1TM(expTrajMeasurements[p]);
-        const auto& pxb1Hit = pxb1TM.recHit();
-        bool inactive = (pxb1Hit->getType()==TrackingRecHit::inactive);
-        int detid= pxb1Hit->geographicalId();
-        bool found_det = false;
+      }
+      
+    }//traj loop
+    
+    
+    
+    if (eff_pxb1_vector.size() == 1) {   
+      
+      //eff map is filled -> decide what to do for double hits, ie eff_pxb1_vector.size>1 ... if 1 just use MISSING and VALID as usual      
+      
+      if (eff_pxb1_vector[0].second[0]) { 
+	histo[VALID].fill(eff_pxb1_vector[0].first, &iEvent); 
+	histo[EFFICIENCY].fill(1, eff_pxb1_vector[0].first, &iEvent); 
         
-        if (passcuts && passcuts_hit){
-            for (unsigned int i_eff=0; i_eff<eff_pxb1_vector.size(); i_eff++){
-                //in case found hit in the same det, take only the valid hit
-                if (eff_pxb1_vector[i_eff].first==detid){
-                    
-                    found_det=true;
-                    if (eff_pxb1_vector[i_eff].second[0]==false && valid==true){
-                        eff_pxb1_vector[i_eff].second[2]=inactive;
-                    } 
-                }
-                
-            }
-            
-            //if no other hit in det
-            if (!found_det) {
-            
-                eff_map.first=detid;
-                eff_map.second[2]=inactive;
-                eff_pxb1_vector.push_back(eff_map);  
-                
-            }
-            
-        }
+      }
+      if (eff_pxb1_vector[0].second[1]) { 
+	histo[MISSING].fill(eff_pxb1_vector[0].first, &iEvent); 
+	histo[EFFICIENCY].fill(0, eff_pxb1_vector[0].first, &iEvent); 
         
+      }
+      
+      if (eff_pxb1_vector[0].second[2]) { 
+	histo[INACTIVE].fill(eff_pxb1_vector[0].first, &iEvent); 
+        
+      }
+      
     }
     
-
-        
-    if (eff_pxb1_vector.size() == 1) {   
-    
-    //eff map is filled -> decide what to do for double hits, ie eff_pxb1_vector.size>1 ... if 1 just use MISSING and VALID as usual      
-      
-        if (eff_pxb1_vector[0].second[0]) { 
-            histo[VALID].fill(eff_pxb1_vector[0].first, &iEvent); 
-            histo[EFFICIENCY].fill(1, eff_pxb1_vector[0].first, &iEvent); 
-            
-        }
-        if (eff_pxb1_vector[0].second[1]) { 
-            histo[MISSING].fill(eff_pxb1_vector[0].first, &iEvent); 
-            histo[EFFICIENCY].fill(0, eff_pxb1_vector[0].first, &iEvent); 
-            
-        }
-      
-        if (eff_pxb1_vector[0].second[2]) { 
-            histo[INACTIVE].fill(eff_pxb1_vector[0].first, &iEvent); 
-            
-        }
-
-        }
-     
-  }
-
-    
+  }//trajTrackHandle
+  
+  
   histo[VALID   ].executePerEventHarvesting(&iEvent);
   histo[MISSING ].executePerEventHarvesting(&iEvent);
   histo[INACTIVE].executePerEventHarvesting(&iEvent);
